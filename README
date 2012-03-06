@@ -8,23 +8,23 @@ Please note that it will only output text/sql/bash files. It will not run them. 
 The tools you can run are:
 
 [1] Duplicate key checker
-[2] Duplicate key checker for the top 25 largest tablest on your MySQL server.
+[2] Duplicate key checker for the top 25 largest tables on your MySQL server.
 (Caution, finding the top 25 largest tables can put your MySQL server under some temporary load)
 
-[3] Duplicate key checker for the top 25 most used tablest on your MySQL server.
+[3] Duplicate key checker for the top 25 most used tables on your MySQL server.
 (Caution, finding the top 25 most used tables can put your MySQL server under some temporary load)
 
-[4] Duplicate key checker for the top 25 most used and largest tablest on your MySQL server.
+[4] Duplicate key checker for the top 25 most used and largest tables on your MySQL server.
 (Caution, finding the top 25 most used and largest tables can put your MySQL server under some temporary load)
 
 [5] Unused Indexes (Requires USER_STATISTICS PATCH and for it to run a decent amount of time)
-[6] Unused Indexes for the top 25 largest tablest on your MySQL server.
+[6] Unused Indexes for the top 25 largest tables on your MySQL server.
 (Caution, finding the top 25 largest tables can put your MySQL server under some temporary load)
 
-[7] Unused Indexes for the top 25 most used tablest on your MySQL server.
+[7] Unused Indexes for the top 25 most used tables on your MySQL server.
 (Caution, finding the top 25 most used tables can put your MySQL server under some temporary load)
 
-[8] Duplicate key checker for the top 25 most used and largest tablest on your MySQL server.
+[8] Duplicate key checker for the top 25 most used and largest tables on your MySQL server.
 (Caution, finding the top 25 most used and largest tables can put your MySQL server under some temporary load)
 
 [9] Everything togther. Both pt-duplicate-key-checker and unused indexes fused together. (May result in two 'alter table's for same table)
