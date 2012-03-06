@@ -217,6 +217,6 @@ while true; do
                 dropkey;
                 exit;;
 	[qQ]* ) exit;;
-        * ) echo "Please type 1, 2, 3, 4 or Q.";;
+        * ) echo "Please type 1-9 or Q.";;
     esac
 done
