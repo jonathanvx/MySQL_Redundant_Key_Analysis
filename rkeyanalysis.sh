@@ -2,11 +2,47 @@
 
 ### Config ###
 SERVER=127.0.0.1
+USER=root
+PASSWORD=
 ### End of Config ###
 
+function checkbinaries {
+pt-duplicate-key-checker --version > /dev/null 2>&1
+ptexists=$?
+
+if [ $ptexists -eq 0 ];
+then
+	DUPCHECKERBIN=/usr/bin/pt-duplicate-key-checker
+	return
+fi
+
+mk-duplicate-key-checker --version > /dev/null 2>&1
+mkexists=$?
+
+if [ $mkexists -eq 0 ];
+then
+	DUPCHECKERBIN=/usr/bin/mk-duplicate-key-checker
+fi
+
+if [ $ptexists -ne 0 ] && [ $mkexists -ne 0 ];
+then
+	echo -e "Please install pt-duplicate-key-checker first"
+	exit 1
+fi
+}
+
+function setdbcnx {
+CNX="--user=$USER --host=$SERVER"
+if [ -n "$PASSWORD" ];
+then
+	CNX=${CNX}" --password=$PASSWORD"
+fi
+}
+
 function dupkey {
-pt-duplicate-key-checker --host=$SERVER --engines=innodb > dupkey.txt
-pt-duplicate-key-checker --host=$SERVER --engines=myisam --no-clustered >> dupkey.txt
+echo "$DUPCHECKERBIN $CNX"
+$DUPCHECKERBIN $CNX --engines=innodb > dupkey.txt
+$DUPCHECKERBIN $CNX --engines=myisam --no-clustered >> dupkey.txt
 echo -e "\ncreated file \033[38;5;148mdupkey.txt\033[39m in your current directory. This is the output from \033[38;5;148mpt-duplicate-key-checker\033[39m."
 }
 
@@ -39,12 +75,12 @@ fi
 
 
 function nonunique {
-	mysql -h $SERVER -N -B -e"select concat(a.table_schema,'.',a.table_name) from (select table_schema,table_name,constraint_name,max(ordinal_position) as key_count from information_schema.key_column_usage group by table_schema,table_name,constraint_name having (constraint_name='PRIMARY' and key_count >1) or (constraint_name !='PRIMARY' and key_count=1)) as a group by a.table_schema,a.table_name having min(a.key_count) > 1;" > nonunique.txt
+	mysql $CNX -N -B -e"select concat(a.table_schema,'.',a.table_name) from (select table_schema,table_name,constraint_name,max(ordinal_position) as key_count from information_schema.key_column_usage group by table_schema,table_name,constraint_name having (constraint_name='PRIMARY' and key_count >1) or (constraint_name !='PRIMARY' and key_count=1)) as a group by a.table_schema,a.table_name having min(a.key_count) > 1;" > nonunique.txt
 	echo -e "\nGenerated \033[38;5;148mnonunique.txt\033[39m in your current directory. This lists all the tables that do not have a unique or primary key that refers to \033[38;5;148mone\033[39m column (currently a limitation for pt-online-schema-change)."
 }
 
 function unused {
-	mysql -N -B -e"select concat('alter table ',d.table_schema,'.',d.table_name,' drop index ',group_concat(index_name separator ',drop index '),';') stmt from (SELECT DISTINCT s.TABLE_SCHEMA, s.TABLE_NAME, s.INDEX_NAME FROM information_schema.statistics s LEFT JOIN information_schema.index_statistics iz ON (s.TABLE_SCHEMA = iz.TABLE_SCHEMA AND s.TABLE_NAME=iz.TABLE_NAME AND s.INDEX_NAME=iz.INDEX_NAME) WHERE iz.TABLE_SCHEMA IS NULL  AND s.NON_UNIQUE=1 AND s.INDEX_NAME!='PRIMARY' and (select rows_read+rows_changed from information_schema.table_statistics ts where ts.table_schema=s.table_schema and ts.table_name=s.table_name)>0) d group by table_schema,table_name;" > unused.txt
+	mysql $CNX -N -B -e"select concat('alter table ',d.table_schema,'.',d.table_name,' drop index ',group_concat(index_name separator ',drop index '),';') stmt from (SELECT DISTINCT s.TABLE_SCHEMA, s.TABLE_NAME, s.INDEX_NAME FROM information_schema.statistics s LEFT JOIN information_schema.index_statistics iz ON (s.TABLE_SCHEMA = iz.TABLE_SCHEMA AND s.TABLE_NAME=iz.TABLE_NAME AND s.INDEX_NAME=iz.INDEX_NAME) WHERE iz.TABLE_SCHEMA IS NULL  AND s.NON_UNIQUE=1 AND s.INDEX_NAME!='PRIMARY' and (select rows_read+rows_changed from information_schema.table_statistics ts where ts.table_schema=s.table_schema and ts.table_name=s.table_name)>0) d group by table_schema,table_name;" > unused.txt
 	echo -e "\ncreated file \033[38;5;148munused.txt\033[39m in your current directory. This is the \033[38;5;148mlist of indexes\033[39m that have not been used during the time you have run user_statistics on your MySQL server. \nThis list excludes UNIQUE and PRIMARY KEYs as well as indexes from tables that have not been used."
 }
 
@@ -62,7 +98,7 @@ fi
 }
 
 function big25 {
-	mysql -h $SERVER -N -B -e"SELECT CONCAT(TABLE_SCHEMA, '.', TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES ORDER BY DATA_LENGTH + INDEX_LENGTH DESC LIMIT  25;" > big25.txt
+	mysql $CNX -N -B -e"SELECT CONCAT(TABLE_SCHEMA, '.', TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES ORDER BY DATA_LENGTH + INDEX_LENGTH DESC LIMIT  25;" > big25.txt
 	echo -e "\ncreated file \033[38;5;148mbig25.txt\033[39m in your current directory. This is the list of your \033[38;5;148mtop 25 largest tables\033[39m by the total of data and index size."
 }
 
@@ -81,7 +117,7 @@ fi
 }
 
 function top25 {
-mysql --host $SERVER -N -B -e"select concat(f.table_schema,'.',f.table_name) from ((select table_schema, table_name, rows_changed_x_indexes as counter from information_schema.TABLE_STATISTICS order by rows_changed_x_indexes desc limit 25) union (select table_schema,table_name, rows_read as counter from information_schema.TABLE_STATISTICS order by rows_read desc limit 25)) f straight_join information_schema.TABLES t on f.table_name = t.table_name and t.table_schema = f.table_schema order by f.counter desc limit 25;" > top25.txt
+mysql $CNX -N -B -e"select concat(f.table_schema,'.',f.table_name) from ((select table_schema, table_name, rows_changed_x_indexes as counter from information_schema.TABLE_STATISTICS order by rows_changed_x_indexes desc limit 25) union (select table_schema,table_name, rows_read as counter from information_schema.TABLE_STATISTICS order by rows_read desc limit 25)) f straight_join information_schema.TABLES t on f.table_name = t.table_name and t.table_schema = f.table_schema order by f.counter desc limit 25;" > top25.txt
 echo -e "\ncreated file \033[38;5;148mtop25.txt\033[39m in your current directory. This is the list of your \033[38;5;148mtop 25 most used tables\033[39m by the total of data and index size."
 }
 
@@ -154,29 +190,35 @@ echo -e "[7] \033[38;5;148mUnused Indexes\033[39m for the \033[38;5;148mtop 25 m
 echo -e "[8] \033[38;5;148mDuplicate key checker\033[39m for the \033[38;5;148mtop 25 most used and largest tables\033[39m on your MySQL server. \n(Caution, finding the top 25 most used and largest tables can put your MySQL server under some temporary load)\n"
 echo -e "[9] \033[38;5;148mEverything togther\033[39m. Both pt-duplicate-key-checker and unused indexes fused together. (May result in two 'alter table's for same table)"
 
+setdbcnx
+
 while true; do
     read -p "Which of the following tools do you wish to run?[1-9 or (Q)uit] " opt
     case $opt in
-        [1]* ) dupkeycheck; 
+        [1]* )  checkbinaries;
+		dupkeycheck; 
 		nonuniquecheck; 
 		fill_list "d";
 		dropkey; 
 		exit;;
-        [2]* )  dupkeycheck; 
+        [2]* )  checkbinaries;
+		dupkeycheck; 
 		nonuniquecheck; 
 		option="big"; 
 		big25check;
 		fill_list "d"; 
 		dropkey; 
 		exit;;
-        [3]* )  dupkeycheck;
+        [3]* )  checkbinaries;
+		dupkeycheck;
                 nonuniquecheck;
                 option="top";
                 top25check;
                 fill_list "d";
 		dropkey;
                 exit;;
-        [4]* )  dupkeycheck;
+        [4]* )  checkbinaries;
+		dupkeycheck;
                 nonuniquecheck;
                 option="all";
                 top25check;
@@ -203,14 +245,16 @@ while true; do
                 fill_list "u";
                 dropkey;
                 exit;;
-        [8]* )  unusedcheck;
+        [8]* )  checkbinaries
+		unusedcheck;
                 nonuniquecheck;
                 big25check;
                 option="all";
                 fill_list "u";
                 dropkey;
                 exit;;
-        [9]* )  nonuniquecheck;
+        [9]* )  checkbinaries;
+		nonuniquecheck;
 		unusedcheck;
 		dupkeycheck;
                 fill_list "a";
@@ -220,3 +264,4 @@ while true; do
         * ) echo "Please type 1-9 or Q.";;
     esac
 done
+
